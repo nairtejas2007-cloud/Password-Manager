@@ -66,7 +66,7 @@ def test_otp_challenge_uses_inserted_verification_record_id(monkeypatch):
     monkeypatch.setattr(main, "query_one", lambda *args: None)
     monkeypatch.setattr(main, "execute", fake_execute)
     monkeypatch.setattr(main, "send_otp_email", lambda *args: None)
-    monkeypatch.setattr(main, "is_smtp_configured", lambda: True)
+    monkeypatch.setattr(main, "is_email_configured", lambda: True)
 
     otp_id = main.issue_otp(7, "test@example.com", "Test User", "login")
     assert otp_id == 39
@@ -77,7 +77,7 @@ def test_otp_can_be_resent_without_consuming_the_previous_code(monkeypatch):
     executed = []
     monkeypatch.setattr(main, "execute", lambda sql, params=(): executed.append((sql, params)) or (39, 1))
     monkeypatch.setattr(main, "send_otp_email", lambda *args: None)
-    monkeypatch.setattr(main, "is_smtp_configured", lambda: True)
+    monkeypatch.setattr(main, "is_email_configured", lambda: True)
 
     main.issue_otp(
         7,
@@ -97,7 +97,7 @@ def test_production_otp_send_limit_stops_before_creating_another_code(monkeypatc
     monkeypatch.setattr(main, "query_one", lambda *args: {"send_count": 5})
     monkeypatch.setattr(main, "execute", lambda *args: executed.append(args))
     monkeypatch.setattr(main, "send_otp_email", lambda *args: pytest.fail("Must not send"))
-    monkeypatch.setattr(main, "is_smtp_configured", lambda: True)
+    monkeypatch.setattr(main, "is_email_configured", lambda: True)
 
     with pytest.raises(HTTPException) as limited:
         main.issue_otp(7, "test@example.com", "Test User", "login")
@@ -108,7 +108,7 @@ def test_production_otp_send_limit_stops_before_creating_another_code(monkeypatc
 
 def test_registration_saves_account_without_sending_otp_and_returns_login_message(monkeypatch):
     transactions = []
-    monkeypatch.setattr(main, "is_smtp_configured", lambda: False)
+    monkeypatch.setattr(main, "is_email_configured", lambda: False)
     monkeypatch.setattr(
         main,
         "execute_transaction",

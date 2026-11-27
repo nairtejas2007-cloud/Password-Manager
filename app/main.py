@@ -31,7 +31,7 @@ from app.config import (
     SESSION_TTL_MINUTES,
 )
 from app.db import execute, execute_transaction, query_all, query_one
-from app.email_service import is_smtp_configured, send_otp_email
+from app.email_service import is_email_configured, send_otp_email
 from app.migrations import migrate_existing_schema
 from app.schemas import (
     ChangePasswordIn,
@@ -150,14 +150,14 @@ def issue_otp(
     account_created: bool = False,
     invalidate_previous: bool = True,
 ):
-    if not is_smtp_configured():
+    if not is_email_configured():
         raise HTTPException(
             status_code=503,
             detail={
-                "code": "smtp_not_configured",
+                "code": "email_not_configured",
                 "message": (
-                    "Email OTP is not configured. Set SMTP_USERNAME and "
-                    "SMTP_APP_PASSWORD in your local .env file, then try again."
+                    "Email OTP is not configured. Set BREVO_API_KEY or configure "
+                    "SMTP_USERNAME and SMTP_APP_PASSWORD, then try again."
                 ),
                 "account_created": account_created,
             },
@@ -200,8 +200,8 @@ def issue_otp(
             detail={
                 "code": "otp_delivery_failed",
                 "message": (
-                    "The verification email could not be sent. Check the Gmail "
-                    "SMTP settings and try again."
+                    "The verification email could not be sent. Check the configured "
+                    "email delivery settings and try again."
                 ),
                 "account_created": account_created,
             },

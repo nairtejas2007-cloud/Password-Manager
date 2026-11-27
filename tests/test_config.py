@@ -10,6 +10,7 @@ def _production_environment(ca_path):
         "DB_USER": "password_manager_app",
         "DB_PASSWORD": "test-db-password",
         "DB_NAME": "password_manager",
+        "EMAIL_FROM": "mailer@example.net",
         "SMTP_USERNAME": "mailer@example.net",
         "SMTP_APP_PASSWORD": "test-smtp-password",
         "OTP_PEPPER": "a" * 64,
@@ -25,6 +26,40 @@ def test_production_configuration_accepts_secure_database_and_host_settings(tmp_
     ca_path.write_text("test certificate", encoding="ascii")
 
     _validate_production_environment(_production_environment(ca_path))
+
+
+def test_production_configuration_accepts_brevo_without_smtp_credentials(tmp_path):
+    ca_path = tmp_path / "database-ca.pem"
+    ca_path.write_text("test certificate", encoding="ascii")
+    environment = _production_environment(ca_path)
+    environment.pop("SMTP_USERNAME")
+    environment.pop("SMTP_APP_PASSWORD")
+    environment["BREVO_API_KEY"] = "test-brevo-api-key"
+
+    _validate_production_environment(environment)
+
+
+def test_production_configuration_requires_smtp_when_brevo_is_not_configured(tmp_path):
+    ca_path = tmp_path / "database-ca.pem"
+    ca_path.write_text("test certificate", encoding="ascii")
+    environment = _production_environment(ca_path)
+    environment.pop("SMTP_USERNAME")
+    environment.pop("SMTP_APP_PASSWORD")
+
+    with pytest.raises(RuntimeError, match="SMTP_USERNAME, SMTP_APP_PASSWORD"):
+        _validate_production_environment(environment)
+
+
+def test_production_configuration_requires_sender_address_for_brevo(tmp_path):
+    ca_path = tmp_path / "database-ca.pem"
+    ca_path.write_text("test certificate", encoding="ascii")
+    environment = _production_environment(ca_path)
+    environment.pop("EMAIL_FROM")
+    environment.pop("SMTP_USERNAME")
+    environment["BREVO_API_KEY"] = "test-brevo-api-key"
+
+    with pytest.raises(RuntimeError, match="EMAIL_FROM"):
+        _validate_production_environment(environment)
 
 
 @pytest.mark.parametrize(

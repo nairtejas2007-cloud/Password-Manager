@@ -36,7 +36,8 @@ SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
 SMTP_APP_PASSWORD = os.getenv("SMTP_APP_PASSWORD", "")
-EMAIL_FROM = os.getenv("EMAIL_FROM", SMTP_USERNAME)
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "").strip()
+EMAIL_FROM = os.getenv("EMAIL_FROM", SMTP_USERNAME).strip()
 SESSION_COOKIE_SECURE = os.getenv(
     "SESSION_COOKIE_SECURE", "true" if IS_PRODUCTION else "false"
 ).strip().lower() == "true"
@@ -67,18 +68,25 @@ def _validate_production_environment(env):
     if env.get("APP_ENV", "development").strip().lower() != "production":
         return
 
-    required = (
+    required = [
         "DB_HOST",
         "DB_USER",
         "DB_PASSWORD",
         "DB_NAME",
-        "SMTP_USERNAME",
-        "SMTP_APP_PASSWORD",
         "OTP_PEPPER",
         "ALLOWED_HOSTS",
         "DB_SSL_CA",
-    )
+    ]
     missing = [name for name in required if not env.get(name, "").strip()]
+    if env.get("BREVO_API_KEY", "").strip():
+        if not env.get("EMAIL_FROM", env.get("SMTP_USERNAME", "")).strip():
+            missing.append("EMAIL_FROM")
+    else:
+        missing.extend(
+            name
+            for name in ("SMTP_USERNAME", "SMTP_APP_PASSWORD")
+            if not env.get(name, "").strip()
+        )
     if missing:
         raise RuntimeError(
             "Production configuration is missing required settings: "

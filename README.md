@@ -48,7 +48,7 @@ With the development default `RUN_MIGRATIONS=true`, startup applies additive, no
 3. Create an app password named `Secure Password Manager`.
 4. Put that 16-character password in `SMTP_APP_PASSWORD` only; never commit `.env`.
 
-SMTP delivery is required for login OTPs. Account creation itself does not send email; the user receives an OTP after correct login credentials are entered. Missing SMTP credentials are reported at that login step.
+Email delivery is required for login OTPs. Set `BREVO_API_KEY` to send through the Brevo Transactional Email API over HTTPS; when it is empty, the app falls back to Gmail SMTP using `SMTP_USERNAME` and `SMTP_APP_PASSWORD`. Set `EMAIL_FROM` to a sender address verified with Brevo (or to the Gmail sender). Account creation itself does not send email; the user receives an OTP after correct login credentials are entered.
 
 ## Run
 
@@ -89,11 +89,11 @@ python -m pytest -q
 
 - **Do not use this deployment for real passwords until the production environment is configured and independently reviewed.** Hardening code is not a security certification.
 - For any network deployment, use HTTPS at a trusted reverse proxy or hosting platform. Production responses enable HSTS and secure cookies; do not expose the app over plain HTTP.
-- Before production startup, set `APP_ENV=production`, `SESSION_COOKIE_SECURE=true`, `DB_SSL_CA` to the mounted database provider CA certificate, `ALLOWED_HOSTS` to the exact public hostname(s), `DB_HOST`/`DB_USER`/`DB_PASSWORD` for a remote database and dedicated non-admin account, and a private 64-hex-character `OTP_PEPPER`. Configure SMTP credentials. `CORS_ORIGINS` may be left empty for a same-origin frontend; otherwise use only exact HTTPS origins.
+- Before production startup, set `APP_ENV=production`, `SESSION_COOKIE_SECURE=true`, `DB_SSL_CA` to the mounted database provider CA certificate, `ALLOWED_HOSTS` to the exact public hostname(s), `DB_HOST`/`DB_USER`/`DB_PASSWORD` for a remote database and dedicated non-admin account, and a private 64-hex-character `OTP_PEPPER`. Configure `BREVO_API_KEY` and a verified `EMAIL_FROM`, or use Gmail SMTP credentials. `CORS_ORIGINS` may be left empty for a same-origin frontend; otherwise use only exact HTTPS origins.
 - Production defaults `RUN_MIGRATIONS=false`; back up the database, then set `RUN_MIGRATIONS=true` for a single controlled startup using a privileged migration account. After migrations succeed, redeploy with `RUN_MIGRATIONS=false` and a least-privilege runtime database account. Never grant the public app unnecessary schema-management privileges.
 - Production OTP delivery is capped at five codes per user and purpose per 15 minutes. This intentionally does not restore the former 30-second resend cooldown.
 - Sessions are in-memory and restart invalidates every session.
 - Login challenges, sessions, and login-attempt throttling are in-memory. Run a single application process/replica; a multi-instance deployment requires shared persistent storage for these values and coordinated rate limits.
 - The checked-in schema supports fresh databases; development startup migrations add the custom-field table to existing databases without dropping saved entries.
-- SMTP is external and requires valid Gmail credentials.
+- Email is external: Brevo uses HTTPS; the Gmail fallback requires valid SMTP credentials.
 - The current browser client uses inline event handlers, so the Content Security Policy permits inline scripts. Replacing those handlers with external event registration would allow a stricter policy.
