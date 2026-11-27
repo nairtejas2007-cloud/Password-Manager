@@ -91,6 +91,21 @@ def test_otp_can_be_resent_without_consuming_the_previous_code(monkeypatch):
     assert any("INSERT INTO email_verifications" in sql for sql, _ in executed)
 
 
+def test_production_otp_send_limit_stops_before_creating_another_code(monkeypatch):
+    executed = []
+    monkeypatch.setattr(main, "OTP_MAX_SENDS_PER_15_MINUTES", 5)
+    monkeypatch.setattr(main, "query_one", lambda *args: {"send_count": 5})
+    monkeypatch.setattr(main, "execute", lambda *args: executed.append(args))
+    monkeypatch.setattr(main, "send_otp_email", lambda *args: pytest.fail("Must not send"))
+    monkeypatch.setattr(main, "is_smtp_configured", lambda: True)
+
+    with pytest.raises(HTTPException) as limited:
+        main.issue_otp(7, "test@example.com", "Test User", "login")
+
+    assert limited.value.status_code == 429
+    assert not executed
+
+
 def test_registration_saves_account_without_sending_otp_and_returns_login_message(monkeypatch):
     transactions = []
     monkeypatch.setattr(main, "is_smtp_configured", lambda: False)

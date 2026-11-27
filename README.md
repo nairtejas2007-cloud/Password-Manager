@@ -37,9 +37,9 @@ copy .env.example .env
 ```
 
 4. Edit `.env`. Set `DB_PASSWORD`, `SMTP_USERNAME`, and `SMTP_APP_PASSWORD` before use.
-   Also set `OTP_PEPPER` to a stable, private random value (for example, generate one with `python -c "import secrets; print(secrets.token_hex(32))"`). Do not change it while verification codes are active.
+   Also set `OTP_PEPPER` to a stable, private random value (for example, generate one with `python -c "import secrets; print(secrets.token_hex(32))"`). Do not change it while verification codes are active. For local development, `APP_ENV=development` and `RUN_MIGRATIONS=true` are appropriate.
 
-On startup, the app applies additive, non-destructive compatibility migrations to older databases (including the original `username`-based schema) and creates the `vault_fields` table if needed. Existing password entries are preserved; entries using the older username/password/notes columns are presented as fields and can be edited without losing their values. Review and back up your database before production migrations.
+With the development default `RUN_MIGRATIONS=true`, startup applies additive, non-destructive compatibility migrations to older databases (including the original `username`-based schema) and creates the `vault_fields` table if needed. Existing password entries are preserved; entries using the older username/password/notes columns are presented as fields and can be edited without losing their values. Review and back up your database before production migrations.
 
 ## Gmail App Password
 
@@ -58,7 +58,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 5000 --reload
 ```
 
 Open <http://127.0.0.1:5000>.
-API documentation is at <http://127.0.0.1:5000/api/docs>.
+In development, API documentation is at <http://127.0.0.1:5000/api/docs>. It is disabled in production.
 
 ## Tests
 
@@ -87,8 +87,13 @@ python -m pytest -q
 
 ## Operational limitations
 
-- The app is intended for local/controlled HTTPS deployment. Run behind a TLS reverse proxy for network use.
+- **Do not use this deployment for real passwords until the production environment is configured and independently reviewed.** Hardening code is not a security certification.
+- For any network deployment, use HTTPS at a trusted reverse proxy or hosting platform. Production responses enable HSTS and secure cookies; do not expose the app over plain HTTP.
+- Before production startup, set `APP_ENV=production`, `SESSION_COOKIE_SECURE=true`, `DB_SSL_CA` to the mounted database provider CA certificate, `ALLOWED_HOSTS` to the exact public hostname(s), `DB_HOST`/`DB_USER`/`DB_PASSWORD` for a remote database and dedicated non-admin account, and a private 64-hex-character `OTP_PEPPER`. Configure SMTP credentials. `CORS_ORIGINS` may be left empty for a same-origin frontend; otherwise use only exact HTTPS origins.
+- Production defaults `RUN_MIGRATIONS=false`; back up the database, then set `RUN_MIGRATIONS=true` for a single controlled startup using a privileged migration account. After migrations succeed, redeploy with `RUN_MIGRATIONS=false` and a least-privilege runtime database account. Never grant the public app unnecessary schema-management privileges.
+- Production OTP delivery is capped at five codes per user and purpose per 15 minutes. This intentionally does not restore the former 30-second resend cooldown.
 - Sessions are in-memory and restart invalidates every session.
-- The checked-in schema supports fresh databases; startup migrations add the custom-field table to existing databases without dropping saved entries.
+- Login challenges, sessions, and login-attempt throttling are in-memory. Run a single application process/replica; a multi-instance deployment requires shared persistent storage for these values and coordinated rate limits.
+- The checked-in schema supports fresh databases; development startup migrations add the custom-field table to existing databases without dropping saved entries.
 - SMTP is external and requires valid Gmail credentials.
-- OTP/login throttling and active sessions are in-memory; use a single app process locally. A multi-instance deployment needs shared, persistent rate-limit and session storage.
+- The current browser client uses inline event handlers, so the Content Security Policy permits inline scripts. Replacing those handlers with external event registration would allow a stricter policy.

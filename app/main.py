@@ -10,17 +10,23 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from mysql.connector.errors import IntegrityError
 
 from app import security, services, sessions
 from app.config import (
+    ALLOWED_HOSTS,
+    CORS_ORIGINS,
+    IS_PRODUCTION,
     LOCKOUT_MINUTES,
     MAX_FAILED_ATTEMPTS,
     OTP_EXPIRY_MINUTES,
+    OTP_MAX_SENDS_PER_15_MINUTES,
     OTP_MAX_ATTEMPTS,
     OTP_PEPPER,
+    RUN_MIGRATIONS,
     SESSION_COOKIE_SECURE,
     SESSION_TTL_MINUTES,
 )
@@ -45,22 +51,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    migrate_existing_schema()
+    if RUN_MIGRATIONS:
+        migrate_existing_schema()
     yield
 
 
 app = FastAPI(
     title="Secure Password Manager",
-    docs_url="/api/docs",
+    docs_url=None if IS_PRODUCTION else "/api/docs",
     redoc_url=None,
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
     lifespan=lifespan,
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5000", "http://localhost:5000"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
 if (BASE_DIR / "static").exists():
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -79,6 +89,16 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; base-uri 'self'; object-src 'none'; "
+        "frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; "
+        "connect-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'"
+    )
+    if IS_PRODUCTION:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     return response
@@ -142,6 +162,19 @@ def issue_otp(
                 "account_created": account_created,
             },
         )
+
+    if OTP_MAX_SENDS_PER_15_MINUTES is not None:
+        send_count = query_one(
+            "SELECT COUNT(*) AS send_count FROM email_verifications "
+            "WHERE user_id = %s AND purpose = %s "
+            "AND created_at >= NOW() - INTERVAL 15 MINUTE",
+            (user_id, purpose),
+        )
+        if send_count and send_count["send_count"] >= OTP_MAX_SENDS_PER_15_MINUTES:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many verification codes requested. Try again later.",
+            )
 
     code = f"{secrets.randbelow(1_000_000):06d}"
     if invalidate_previous:
