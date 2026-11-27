@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+mysql-connector-python
+argon2-cffi
+cryptography
+pyotp
+python-dotenv
+requests
+pytest
+jinja2
+email-validator
